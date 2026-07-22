@@ -133,6 +133,7 @@ function Main({ userId }) {
   const [trackers, setTrackers] = useState([])
   const [outcomes, setOutcomes] = useState({}) // tracker_id -> outcomes[]
   const [events, setEvents] = useState([]) // all events (for database counts)
+  const [categories, setCategories] = useState([]) // all categories
 
   useEffect(() => { loadAll() }, [])
 
@@ -140,6 +141,7 @@ function Main({ userId }) {
     const { data: t } = await supabase.from('trackers').select('*').order('created_at')
     const { data: o } = await supabase.from('tracker_outcomes').select('*').order('sort_order')
     const { data: e } = await supabase.from('tracking_events').select('tracker_id, outcome_id')
+    const { data: c } = await supabase.from('categories').select('*').order('created_at')
     setTrackers(t || [])
     const grouped = {}
     ;(o || []).forEach(oc => {
@@ -148,18 +150,19 @@ function Main({ userId }) {
     })
     setOutcomes(grouped)
     setEvents(e || [])
+    setCategories(c || [])
   }
 
   return (
     <div className="app has-nav">
       {screen === 'tracking' && (
-        <Tracking userId={userId} trackers={trackers} outcomes={outcomes} onLogged={loadAll} />
+        <Tracking userId={userId} trackers={trackers} outcomes={outcomes} categories={categories} onLogged={loadAll} />
       )}
       {screen === 'database' && (
         <Database trackers={trackers} outcomes={outcomes} events={events} />
       )}
       {screen === 'settings' && (
-        <Settings userId={userId} trackers={trackers} outcomes={outcomes} onChange={loadAll} />
+        <Settings userId={userId} trackers={trackers} outcomes={outcomes} categories={categories} onChange={loadAll} />
       )}
 
       <nav className="bottom-nav">
@@ -174,11 +177,12 @@ function Main({ userId }) {
 }
 
 // ---------------- TRACKING ----------------
-function Tracking({ userId, trackers, outcomes, onLogged }) {
+function Tracking({ userId, trackers, outcomes, categories, onLogged }) {
   const [street, setStreet] = useState(null)
   const [play, setPlay] = useState(null)
   const [flash, setFlash] = useState(null)
   const [sessionCounts, setSessionCounts] = useState({}) // outcome_id -> count this view
+  const [activeCat, setActiveCat] = useState('all') // 'all' | category id
 
   async function log(outcomeId) {
     const { error } = await supabase.from('tracking_events').insert({
@@ -213,16 +217,30 @@ function Tracking({ userId, trackers, outcomes, onLogged }) {
 
   // Plays-in-street view
   if (street) {
-    const plays = trackers.filter(t => t.street === street)
+    const streetCats = categories.filter(c => c.street === street)
+    const streetPlays = trackers.filter(t => t.street === street)
+    const plays = activeCat === 'all'
+      ? streetPlays
+      : streetPlays.filter(p => p.category_id === activeCat)
     return (
       <div className="screen">
-        <button className="back-btn" onClick={() => setStreet(null)}>← streets</button>
-        <h1>{street}</h1>
+        <button className="back-btn" onClick={() => { setStreet(null); setActiveCat('all') }}>← streets</button>
+        <div className="street-head">
+          <h1>{street}</h1>
+          {streetCats.length > 0 && (
+            <div className="cat-tabs">
+              <button className={`cat-tab ${activeCat === 'all' ? 'active' : ''}`} onClick={() => setActiveCat('all')}>All</button>
+              {streetCats.map(c => (
+                <button key={c.id} className={`cat-tab ${activeCat === c.id ? 'active' : ''}`} onClick={() => setActiveCat(c.id)}>{c.name}</button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="list">
           {plays.map(p => (
             <button key={p.id} className="row-btn" onClick={() => setPlay(p)}>{p.name}</button>
           ))}
-          {plays.length === 0 && <p className="empty">No plays for {street}. Add one in Settings.</p>}
+          {plays.length === 0 && <p className="empty">No plays here. Add one in Settings.</p>}
         </div>
       </div>
     )
@@ -304,26 +322,44 @@ function Database({ trackers, outcomes, events }) {
 }
 
 // ---------------- SETTINGS ----------------
-function Settings({ userId, trackers, outcomes, onChange }) {
+function Settings({ userId, trackers, outcomes, categories, onChange }) {
   const [adding, setAdding] = useState(false)
   const [street, setStreet] = useState('preflop')
   const [name, setName] = useState('')
   const [opts, setOpts] = useState([''])
   const [busy, setBusy] = useState(false)
+  const [catChoice, setCatChoice] = useState('none') // 'none' | category id | 'new'
+  const [newCatName, setNewCatName] = useState('')
+
+  const streetCats = categories.filter(c => c.street === street)
 
   async function save() {
     const clean = opts.map(s => s.trim()).filter(Boolean)
     if (!name.trim() || clean.length === 0) { alert('Need a name and at least one result'); return }
     setBusy(true)
+
+    // resolve category
+    let categoryId = null
+    if (catChoice === 'new') {
+      const cn = newCatName.trim()
+      if (!cn) { alert('Enter a category name or pick None'); setBusy(false); return }
+      const { data: cat, error: ce } = await supabase.from('categories')
+        .insert({ name: cn, street, user_id: userId }).select().single()
+      if (ce) { alert(ce.message); setBusy(false); return }
+      categoryId = cat.id
+    } else if (catChoice !== 'none') {
+      categoryId = catChoice
+    }
+
     const { data: tracker, error } = await supabase.from('trackers')
-      .insert({ name: name.trim(), street, user_id: userId }).select().single()
+      .insert({ name: name.trim(), street, user_id: userId, category_id: categoryId }).select().single()
     if (error) { alert(error.message); setBusy(false); return }
     const rows = clean.map((label, i) => ({
       tracker_id: tracker.id, user_id: userId, label, sort_order: i
     }))
     const { error: e2 } = await supabase.from('tracker_outcomes').insert(rows)
     if (e2) { alert(e2.message); setBusy(false); return }
-    setName(''); setStreet('preflop'); setOpts(['']); setAdding(false); setBusy(false)
+    setName(''); setStreet('preflop'); setOpts(['']); setCatChoice('none'); setNewCatName(''); setAdding(false); setBusy(false)
     onChange()
   }
 
@@ -332,6 +368,14 @@ function Settings({ userId, trackers, outcomes, onChange }) {
     await supabase.from('trackers').delete().eq('id', id)
     onChange()
   }
+
+  function pickStreet(s) {
+    setStreet(s)
+    setCatChoice('none') // categories are street-specific, reset on street change
+    setNewCatName('')
+  }
+
+  const catName = id => (categories.find(c => c.id === id) || {}).name
 
   if (adding) {
     return (
@@ -342,9 +386,22 @@ function Settings({ userId, trackers, outcomes, onChange }) {
         <label className="field-label">Type</label>
         <div className="street-row">
           {STREETS.map(s => (
-            <button key={s} className={`street-btn ${street === s ? 'active' : ''}`} onClick={() => setStreet(s)}>{s}</button>
+            <button key={s} className={`street-btn ${street === s ? 'active' : ''}`} onClick={() => pickStreet(s)}>{s}</button>
           ))}
         </div>
+
+        <label className="field-label">Category</label>
+        <div className="cat-choice">
+          <button className={`chip ${catChoice === 'none' ? 'active' : ''}`} onClick={() => setCatChoice('none')}>None</button>
+          {streetCats.map(c => (
+            <button key={c.id} className={`chip ${catChoice === c.id ? 'active' : ''}`} onClick={() => setCatChoice(c.id)}>{c.name}</button>
+          ))}
+          <button className={`chip new ${catChoice === 'new' ? 'active' : ''}`} onClick={() => setCatChoice('new')}>+ New</button>
+        </div>
+        {catChoice === 'new' && (
+          <input className="text-input" style={{ marginTop: 10 }} value={newCatName}
+            onChange={e => setNewCatName(e.target.value)} placeholder="Category name, e.g. Heads up" />
+        )}
 
         <label className="field-label">Name</label>
         <input className="text-input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. cbet" />
@@ -383,7 +440,10 @@ function Settings({ userId, trackers, outcomes, onChange }) {
             {plays.map(p => (
               <div key={p.id} className="settings-row">
                 <div>
-                  <span className="tracker-name">{p.name}</span>
+                  <span className="tracker-name">
+                    {p.name}
+                    {p.category_id && <span className="cat-badge">{catName(p.category_id)}</span>}
+                  </span>
                   <span className="settings-opts">{(outcomes[p.id] || []).map(o => o.label).join(' · ')}</span>
                 </div>
                 <button className="delete-btn" onClick={() => del(p.id)}>×</button>

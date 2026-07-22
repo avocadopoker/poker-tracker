@@ -186,3 +186,32 @@ h2 { font-size: 1rem; margin: 0; }
   content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
   width: 28px; height: 3px; background: var(--red); border-radius: 0 0 3px 3px;
 }
+
+/* category tabs (tracking street view) */
+.street-head { margin-bottom: 22px; }
+.street-head h1 { margin-bottom: 12px; }
+.cat-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.cat-tab {
+  background: var(--surface); border: 1.5px solid var(--line); color: var(--muted);
+  padding: 8px 16px; border-radius: 999px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+  transition: all 0.12s;
+}
+.cat-tab.active { background: var(--red); border-color: var(--red); color: #fff; }
+
+/* category choice (settings add-play) */
+.cat-choice { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  background: var(--surface); border: 1.5px solid var(--line); color: var(--muted);
+  padding: 9px 16px; border-radius: 999px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+  transition: all 0.12s;
+}
+.chip.active { background: var(--red); border-color: var(--red); color: #fff; }
+.chip.new { color: var(--red); border-style: dashed; border-color: var(--red); }
+.chip.new.active { color: #fff; border-style: solid; }
+
+/* category badge (settings list) */
+.cat-badge {
+  display: inline-block; margin-left: 8px; padding: 2px 9px;
+  background: var(--red-soft); color: var(--red); border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700; vertical-align: middle;
+}
