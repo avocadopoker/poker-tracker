@@ -180,19 +180,18 @@ function Main({ userId }) {
 function Tracking({ userId, trackers, outcomes, categories, onLogged }) {
   const [street, setStreet] = useState(null)
   const [play, setPlay] = useState(null)
-  const [flash, setFlash] = useState(null)
-  const [sessionCounts, setSessionCounts] = useState({}) // outcome_id -> count this view
-  const [activeCat, setActiveCat] = useState('all') // 'all' | category id
+  const [activeCat, setActiveCat] = useState(null) // null | category id (set to first category when a street with categories is opened)
 
   async function log(outcomeId) {
     const { error } = await supabase.from('tracking_events').insert({
       tracker_id: play.id, outcome_id: outcomeId, user_id: userId
     })
     if (error) { alert('Error: ' + error.message); return }
-    setSessionCounts(p => ({ ...p, [outcomeId]: (p[outcomeId] || 0) + 1 }))
-    setFlash(outcomeId)
-    setTimeout(() => setFlash(null), 500)
     onLogged()
+    // jump back to the street list so the next street is one tap away
+    setPlay(null)
+    setStreet(null)
+    setActiveCat(null)
   }
 
   // Result view
@@ -200,13 +199,12 @@ function Tracking({ userId, trackers, outcomes, categories, onLogged }) {
     const list = outcomes[play.id] || []
     return (
       <div className="screen">
-        <button className="back-btn" onClick={() => { setPlay(null); setSessionCounts({}) }}>← {street}</button>
+        <button className="back-btn" onClick={() => setPlay(null)}>← {street}</button>
         <h1>{play.name}</h1>
         <div className="outcome-grid">
           {list.map(o => (
-            <button key={o.id} className={`outcome-btn ${flash === o.id ? 'flash' : ''}`} onClick={() => log(o.id)}>
+            <button key={o.id} className="outcome-btn" onClick={() => log(o.id)}>
               <span className="outcome-label">{o.label}</span>
-              <span className="outcome-count">{sessionCounts[o.id] || 0}</span>
             </button>
           ))}
           {list.length === 0 && <p className="empty">No results defined for this play.</p>}
@@ -219,17 +217,17 @@ function Tracking({ userId, trackers, outcomes, categories, onLogged }) {
   if (street) {
     const streetCats = categories.filter(c => c.street === street)
     const streetPlays = trackers.filter(t => t.street === street)
-    const plays = activeCat === 'all'
-      ? streetPlays
-      : streetPlays.filter(p => p.category_id === activeCat)
+    // With categories: filter to the active one (no "All"). Without: show every play.
+    const plays = streetCats.length > 0
+      ? streetPlays.filter(p => p.category_id === activeCat)
+      : streetPlays
     return (
       <div className="screen">
-        <button className="back-btn" onClick={() => { setStreet(null); setActiveCat('all') }}>← streets</button>
+        <button className="back-btn" onClick={() => { setStreet(null); setActiveCat(null) }}>← streets</button>
         <div className="street-head">
           <h1>{street}</h1>
           {streetCats.length > 0 && (
             <div className="cat-tabs">
-              <button className={`cat-tab ${activeCat === 'all' ? 'active' : ''}`} onClick={() => setActiveCat('all')}>All</button>
               {streetCats.map(c => (
                 <button key={c.id} className={`cat-tab ${activeCat === c.id ? 'active' : ''}`} onClick={() => setActiveCat(c.id)}>{c.name}</button>
               ))}
@@ -247,12 +245,18 @@ function Tracking({ userId, trackers, outcomes, categories, onLogged }) {
   }
 
   // Street list
+  function openStreet(s) {
+    const firstCat = categories.find(c => c.street === s)
+    setActiveCat(firstCat ? firstCat.id : null)
+    setStreet(s)
+  }
+
   return (
     <div className="screen">
       <h1>Tracking</h1>
       <div className="list">
         {STREETS.map(s => (
-          <button key={s} className="row-btn big" onClick={() => setStreet(s)}>{s}</button>
+          <button key={s} className="row-btn big" onClick={() => openStreet(s)}>{s}</button>
         ))}
       </div>
     </div>
