@@ -55,6 +55,7 @@ h2 { font-size: 1rem; margin: 0; }
 
 /* auth */
 .auth-msg { color: #f4212e; font-size: 0.9rem; margin: 12px 0 0; }
+.auth-info { color: #00ba7c; font-size: 0.9rem; margin: 12px 0 0; }
 
 /* form fields */
 .field-label {

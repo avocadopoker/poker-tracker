@@ -7,31 +7,78 @@ const STREETS = ['preflop', 'flop', 'turn', 'river']
 export default function App() {
   const [session, setSession] = useState(null)
   const [authReady, setAuthReady] = useState(false)
+  const [recovering, setRecovering] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
       setAuthReady(true)
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true)
+      setSession(s)
+    })
     return () => sub.subscription.unsubscribe()
   }, [])
 
   if (!authReady) return <div className="app"><p className="empty">Loading…</p></div>
+  if (recovering) return <ResetPassword onDone={() => setRecovering(false)} />
   if (!session) return <Auth />
   return <Main userId={session.user.id} />
 }
 
-// ---------------- AUTH ----------------
-function Auth() {
-  const [mode, setMode] = useState('login') // 'login' | 'signup'
-  const [email, setEmail] = useState('')
+// ---------------- RESET PASSWORD ----------------
+function ResetPassword({ onDone }) {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
 
-  async function submit() {
+  async function save() {
+    if (password.length < 6) { setMsg('Password must be at least 6 characters'); return }
     setBusy(true); setMsg('')
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) { setMsg(error.message); setBusy(false); return }
+    setMsg('Password updated. You are logged in.')
+    setBusy(false)
+    setTimeout(onDone, 800)
+  }
+
+  return (
+    <div className="app auth">
+      <h1>Set new password</h1>
+      <label className="field-label">New password</label>
+      <input className="text-input" type="password" value={password}
+        onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
+      {msg && <p className="auth-msg">{msg}</p>}
+      <button className="create-btn" style={{ marginTop: 20 }} onClick={save} disabled={busy}>
+        {busy ? '…' : 'Save new password'}
+      </button>
+    </div>
+  )
+}
+
+// ---------------- AUTH ----------------
+function Auth() {
+  const [mode, setMode] = useState('login') // 'login' | 'signup' | 'forgot'
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [info, setInfo] = useState('')
+
+  async function submit() {
+    setBusy(true); setMsg(''); setInfo('')
+
+    if (mode === 'forgot') {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin
+      })
+      if (error) setMsg(error.message)
+      else setInfo('Reset link sent. Check your email.')
+      setBusy(false)
+      return
+    }
+
     const fn = mode === 'login'
       ? supabase.auth.signInWithPassword({ email, password })
       : supabase.auth.signUp({ email, password })
@@ -40,22 +87,42 @@ function Auth() {
     setBusy(false)
   }
 
+  const cta = mode === 'login' ? 'Log in' : mode === 'signup' ? 'Create account' : 'Send reset link'
+
   return (
     <div className="app auth">
       <h1>Live Tracker</h1>
       <label className="field-label">Email</label>
       <input className="text-input" type="email" value={email}
         onChange={e => setEmail(e.target.value)} placeholder="you@email.com" />
-      <label className="field-label">Password</label>
-      <input className="text-input" type="password" value={password}
-        onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
+      {mode !== 'forgot' && (
+        <>
+          <label className="field-label">Password</label>
+          <input className="text-input" type="password" value={password}
+            onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
+        </>
+      )}
       {msg && <p className="auth-msg">{msg}</p>}
+      {info && <p className="auth-info">{info}</p>}
       <button className="create-btn" style={{ marginTop: 20 }} onClick={submit} disabled={busy}>
-        {busy ? '…' : mode === 'login' ? 'Log in' : 'Create account'}
+        {busy ? '…' : cta}
       </button>
-      <button className="link-btn" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setMsg('') }}>
-        {mode === 'login' ? 'Need an account? Sign up' : 'Have an account? Log in'}
-      </button>
+
+      {mode === 'login' && (
+        <button className="link-btn" onClick={() => { setMode('forgot'); setMsg(''); setInfo('') }}>
+          Forgot password?
+        </button>
+      )}
+      {mode === 'forgot' && (
+        <button className="link-btn" onClick={() => { setMode('login'); setMsg(''); setInfo('') }}>
+          ← Back to log in
+        </button>
+      )}
+      {mode !== 'forgot' && (
+        <button className="link-btn" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setMsg(''); setInfo('') }}>
+          {mode === 'login' ? 'Need an account? Sign up' : 'Have an account? Log in'}
+        </button>
+      )}
     </div>
   )
 }
