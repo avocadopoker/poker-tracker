@@ -20,7 +20,7 @@ body {
 }
 
 .app { max-width: 480px; margin: 0 auto; min-height: 100vh; background: var(--bg); }
-.app.has-nav { padding-bottom: 80px; }
+.app.has-nav { padding-bottom: 20px; }
 .screen, .auth { padding: 24px 18px 40px; }
 
 h1 {
@@ -169,22 +169,21 @@ h2 { font-size: 1rem; margin: 0; }
 .tracker-name { font-weight: 700; display: block; }
 .settings-opts { color: var(--muted); font-size: 0.85rem; }
 
-/* bottom nav */
-.bottom-nav {
-  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: 100%; max-width: 480px;
-  display: flex; background: var(--surface); border-top: 1px solid var(--line);
-  box-shadow: 0 -2px 12px rgba(20,20,30,0.06);
+/* top nav */
+.top-nav {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; background: var(--surface); border-bottom: 1px solid var(--line);
+  box-shadow: 0 2px 12px rgba(20,20,30,0.06);
 }
-.bottom-nav button {
+.top-nav button {
   flex: 1; background: none; border: none; color: var(--muted);
-  padding: 18px 0; font-size: 0.9rem; font-weight: 600; cursor: pointer; text-transform: capitalize;
+  padding: 17px 0; font-size: 0.92rem; font-weight: 700; cursor: pointer; text-transform: capitalize;
   position: relative; transition: color 0.12s;
 }
-.bottom-nav button.active { color: var(--red); }
-.bottom-nav button.active::after {
-  content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-  width: 28px; height: 3px; background: var(--red); border-radius: 0 0 3px 3px;
+.top-nav button.active { color: var(--red); }
+.top-nav button.active::after {
+  content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 28px; height: 3px; background: var(--red); border-radius: 3px 3px 0 0;
 }
 
 /* category tabs (tracking street view) */
@@ -215,3 +214,28 @@ h2 { font-size: 1rem; margin: 0; }
   background: var(--red-soft); color: var(--red); border-radius: 999px;
   font-size: 0.72rem; font-weight: 700; vertical-align: middle;
 }
+
+/* game tabs (tracking + database) */
+.game-tabs {
+  display: flex; flex-wrap: wrap; gap: 8px; margin: -8px 0 20px;
+}
+.game-tab {
+  background: var(--surface); border: 1.5px solid var(--line); color: var(--muted);
+  padding: 9px 16px; border-radius: 999px; font-size: 0.9rem; font-weight: 700; cursor: pointer;
+  transition: all 0.12s;
+}
+.game-tab.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+/* setup subtabs */
+.subtabs {
+  display: flex; gap: 6px; background: var(--line); padding: 4px;
+  border-radius: 12px; margin-bottom: 22px;
+}
+.subtab {
+  flex: 1; background: none; border: none; color: var(--muted);
+  padding: 11px 0; border-radius: 9px; font-size: 0.92rem; font-weight: 700; cursor: pointer;
+  transition: all 0.12s;
+}
+.subtab.active { background: var(--surface); color: var(--red); box-shadow: 0 1px 3px rgba(20,20,30,0.08); }
+
+.add-title { font-size: 1.25rem; font-weight: 800; margin: 6px 0 4px; }

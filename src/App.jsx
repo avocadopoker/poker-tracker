@@ -129,19 +129,23 @@ function Auth() {
 
 // ---------------- MAIN ----------------
 function Main({ userId }) {
-  const [screen, setScreen] = useState('tracking') // 'tracking' | 'database' | 'settings'
+  const [screen, setScreen] = useState('tracking') // 'tracking' | 'database' | 'setup'
   const [trackers, setTrackers] = useState([])
   const [outcomes, setOutcomes] = useState({}) // tracker_id -> outcomes[]
   const [events, setEvents] = useState([]) // all events (for database counts)
   const [categories, setCategories] = useState([]) // all categories
+  const [games, setGames] = useState([])
+  const [activeGame, setActiveGame] = useState(null) // game id
 
   useEffect(() => { loadAll() }, [])
 
   async function loadAll() {
     const { data: t } = await supabase.from('trackers').select('*').order('created_at')
     const { data: o } = await supabase.from('tracker_outcomes').select('*').order('sort_order')
-    const { data: e } = await supabase.from('tracking_events').select('tracker_id, outcome_id')
+    const { data: e } = await supabase.from('tracking_events').select('tracker_id, outcome_id, game_id')
     const { data: c } = await supabase.from('categories').select('*').order('created_at')
+    const { data: g } = await supabase.from('games').select('*').order('created_at')
+
     setTrackers(t || [])
     const grouped = {}
     ;(o || []).forEach(oc => {
@@ -151,40 +155,76 @@ function Main({ userId }) {
     setOutcomes(grouped)
     setEvents(e || [])
     setCategories(c || [])
+
+    const list = g || []
+    setGames(list)
+    // keep current selection if it still exists, else fall back to the first game
+    setActiveGame(prev => {
+      if (prev && list.some(x => x.id === prev)) return prev
+      return list.length > 0 ? list[0].id : null
+    })
   }
 
   return (
     <div className="app has-nav">
-      {screen === 'tracking' && (
-        <Tracking userId={userId} trackers={trackers} outcomes={outcomes} categories={categories} onLogged={loadAll} />
-      )}
-      {screen === 'database' && (
-        <Database trackers={trackers} outcomes={outcomes} events={events} />
-      )}
-      {screen === 'settings' && (
-        <Settings userId={userId} trackers={trackers} outcomes={outcomes} categories={categories} onChange={loadAll} />
-      )}
-
-      <nav className="bottom-nav">
-        {['tracking', 'database', 'settings'].map(s => (
+      <nav className="top-nav">
+        {['tracking', 'database', 'setup'].map(s => (
           <button key={s} className={screen === s ? 'active' : ''} onClick={() => setScreen(s)}>
             {s}
           </button>
         ))}
       </nav>
+
+      {screen === 'tracking' && (
+        <Tracking
+          userId={userId} trackers={trackers} outcomes={outcomes} categories={categories}
+          games={games} activeGame={activeGame} setActiveGame={setActiveGame} onLogged={loadAll}
+        />
+      )}
+      {screen === 'database' && (
+        <Database
+          trackers={trackers} outcomes={outcomes} events={events}
+          games={games} activeGame={activeGame} setActiveGame={setActiveGame}
+        />
+      )}
+      {screen === 'setup' && (
+        <Setup
+          userId={userId} trackers={trackers} outcomes={outcomes}
+          categories={categories} games={games} onChange={loadAll}
+        />
+      )}
+    </div>
+  )
+}
+
+// ---------------- GAME TABS ----------------
+function GameTabs({ games, activeGame, setActiveGame }) {
+  if (games.length < 2) return null
+  return (
+    <div className="game-tabs">
+      {games.map(g => (
+        <button
+          key={g.id}
+          className={`game-tab ${activeGame === g.id ? 'active' : ''}`}
+          onClick={() => setActiveGame(g.id)}
+        >
+          {g.name}
+        </button>
+      ))}
     </div>
   )
 }
 
 // ---------------- TRACKING ----------------
-function Tracking({ userId, trackers, outcomes, categories, onLogged }) {
+function Tracking({ userId, trackers, outcomes, categories, games, activeGame, setActiveGame, onLogged }) {
   const [street, setStreet] = useState(null)
   const [play, setPlay] = useState(null)
-  const [activeCat, setActiveCat] = useState(null) // null | category id (set to first category when a street with categories is opened)
+  const [activeCat, setActiveCat] = useState(null) // null | category id
 
   async function log(outcomeId) {
+    if (!activeGame) { alert('Create a game in Setup first.'); return }
     const { error } = await supabase.from('tracking_events').insert({
-      tracker_id: play.id, outcome_id: outcomeId, user_id: userId
+      tracker_id: play.id, outcome_id: outcomeId, user_id: userId, game_id: activeGame
     })
     if (error) { alert('Error: ' + error.message); return }
     onLogged()
@@ -217,7 +257,7 @@ function Tracking({ userId, trackers, outcomes, categories, onLogged }) {
   if (street) {
     const streetCats = categories.filter(c => c.street === street)
     const streetPlays = trackers.filter(t => t.street === street)
-    // With categories: filter to the active one (no "All"). Without: show every play.
+    // With categories: filter to the active one. Without: show every play.
     const plays = streetCats.length > 0
       ? streetPlays.filter(p => p.category_id === activeCat)
       : streetPlays
@@ -238,7 +278,7 @@ function Tracking({ userId, trackers, outcomes, categories, onLogged }) {
           {plays.map(p => (
             <button key={p.id} className="row-btn" onClick={() => setPlay(p)}>{p.name}</button>
           ))}
-          {plays.length === 0 && <p className="empty">No plays here. Add one in Settings.</p>}
+          {plays.length === 0 && <p className="empty">No plays here. Add one in Setup.</p>}
         </div>
       </div>
     )
@@ -254,6 +294,8 @@ function Tracking({ userId, trackers, outcomes, categories, onLogged }) {
   return (
     <div className="screen">
       <h1>Tracking</h1>
+      <GameTabs games={games} activeGame={activeGame} setActiveGame={setActiveGame} />
+      {games.length === 0 && <p className="empty">No games yet. Add one in Setup → Games.</p>}
       <div className="list">
         {STREETS.map(s => (
           <button key={s} className="row-btn big" onClick={() => openStreet(s)}>{s}</button>
@@ -264,11 +306,13 @@ function Tracking({ userId, trackers, outcomes, categories, onLogged }) {
 }
 
 // ---------------- DATABASE ----------------
-function Database({ trackers, outcomes, events }) {
-  // count events per outcome and per tracker
+function Database({ trackers, outcomes, events, games, activeGame, setActiveGame }) {
+  // only count events from the selected game
+  const scoped = activeGame ? events.filter(e => e.game_id === activeGame) : events
+
   const perOutcome = {}
   const perTracker = {}
-  events.forEach(e => {
+  scoped.forEach(e => {
     perOutcome[e.outcome_id] = (perOutcome[e.outcome_id] || 0) + 1
     perTracker[e.tracker_id] = (perTracker[e.tracker_id] || 0) + 1
   })
@@ -285,7 +329,8 @@ function Database({ trackers, outcomes, events }) {
   return (
     <div className="screen">
       <h1>Database</h1>
-      {!anyData && <p className="empty">No plays yet. Create some in Settings.</p>}
+      <GameTabs games={games} activeGame={activeGame} setActiveGame={setActiveGame} />
+      {!anyData && <p className="empty">No plays yet. Create some in Setup.</p>}
       {byStreet.map(({ street, plays }) => (
         plays.length > 0 && (
           <div key={street} className="db-street">
@@ -325,8 +370,74 @@ function Database({ trackers, outcomes, events }) {
   )
 }
 
-// ---------------- SETTINGS ----------------
-function Settings({ userId, trackers, outcomes, categories, onChange }) {
+// ---------------- SETUP ----------------
+function Setup({ userId, trackers, outcomes, categories, games, onChange }) {
+  const [tab, setTab] = useState('plays') // 'plays' | 'games'
+
+  return (
+    <div className="screen">
+      <div className="settings-head">
+        <h1>Setup</h1>
+        <button className="signout-btn" onClick={() => supabase.auth.signOut()}>Sign out</button>
+      </div>
+
+      <div className="subtabs">
+        <button className={`subtab ${tab === 'plays' ? 'active' : ''}`} onClick={() => setTab('plays')}>Plays</button>
+        <button className={`subtab ${tab === 'games' ? 'active' : ''}`} onClick={() => setTab('games')}>Games</button>
+      </div>
+
+      {tab === 'plays'
+        ? <SetupPlays userId={userId} trackers={trackers} outcomes={outcomes} categories={categories} onChange={onChange} />
+        : <SetupGames userId={userId} games={games} onChange={onChange} />}
+    </div>
+  )
+}
+
+// ---------------- SETUP: GAMES ----------------
+function SetupGames({ userId, games, onChange }) {
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function add() {
+    const n = name.trim()
+    if (!n) { alert('Enter a game name'); return }
+    setBusy(true)
+    const { error } = await supabase.from('games').insert({ name: n, user_id: userId })
+    if (error) { alert(error.message); setBusy(false); return }
+    setName(''); setBusy(false)
+    onChange()
+  }
+
+  async function del(id, gname) {
+    if (!confirm(`Delete "${gname}"? All data tracked in this game will be deleted too.`)) return
+    await supabase.from('games').delete().eq('id', id)
+    onChange()
+  }
+
+  return (
+    <div>
+      {games.map(g => (
+        <div key={g.id} className="settings-row">
+          <span className="tracker-name">{g.name}</span>
+          <button className="delete-btn" onClick={() => del(g.id, g.name)}>×</button>
+        </div>
+      ))}
+      {games.length === 0 && <p className="empty">No games yet.</p>}
+
+      <label className="field-label">Add game</label>
+      <div className="outcome-input-row">
+        <input className="text-input" value={name} onChange={e => setName(e.target.value)}
+          placeholder="e.g. 1/2 PLO" />
+      </div>
+      <button className="create-btn" style={{ marginTop: 12 }} onClick={add} disabled={busy}>
+        {busy ? '…' : 'Add game'}
+      </button>
+    </div>
+  )
+}
+
+// ---------------- SETUP: PLAYS ----------------
+function SetupPlays({ userId, trackers, outcomes, categories, onChange }) {
   const [adding, setAdding] = useState(false)
   const [street, setStreet] = useState('preflop')
   const [name, setName] = useState('')
@@ -383,9 +494,9 @@ function Settings({ userId, trackers, outcomes, categories, onChange }) {
 
   if (adding) {
     return (
-      <div className="screen">
-        <button className="back-btn" onClick={() => setAdding(false)}>← settings</button>
-        <h1>Add play</h1>
+      <div>
+        <button className="back-btn" onClick={() => setAdding(false)}>← plays</button>
+        <h2 className="add-title">Add play</h2>
 
         <label className="field-label">Type</label>
         <div className="street-row">
@@ -429,12 +540,7 @@ function Settings({ userId, trackers, outcomes, categories, onChange }) {
   }
 
   return (
-    <div className="screen">
-      <div className="settings-head">
-        <h1>Settings</h1>
-        <button className="signout-btn" onClick={() => supabase.auth.signOut()}>Sign out</button>
-      </div>
-
+    <div>
       {STREETS.map(s => {
         const plays = trackers.filter(t => t.street === s)
         if (plays.length === 0) return null
