@@ -183,8 +183,8 @@ function Main({ userId }) {
       )}
       {screen === 'database' && (
         <Database
-          trackers={trackers} outcomes={outcomes} events={events}
-          games={games} activeGame={activeGame} setActiveGame={setActiveGame}
+          userId={userId} trackers={trackers} outcomes={outcomes} events={events}
+          games={games} activeGame={activeGame} setActiveGame={setActiveGame} onChange={loadAll}
         />
       )}
       {screen === 'setup' && (
@@ -306,7 +306,10 @@ function Tracking({ userId, trackers, outcomes, categories, games, activeGame, s
 }
 
 // ---------------- DATABASE ----------------
-function Database({ trackers, outcomes, events, games, activeGame, setActiveGame }) {
+function Database({ userId, trackers, outcomes, events, games, activeGame, setActiveGame, onChange }) {
+  const [editing, setEditing] = useState(false)
+  const [busy, setBusy] = useState(false)
+
   // only count events from the selected game
   const scoped = activeGame ? events.filter(e => e.game_id === activeGame) : events
 
@@ -326,10 +329,48 @@ function Database({ trackers, outcomes, events, games, activeGame, setActiveGame
 
   const anyData = trackers.length > 0
 
+  // add (+1) or remove (-1) a single tracked event for this outcome in the active game
+  async function adjust(trackerId, outcomeId, delta) {
+    if (!activeGame) { alert('No game selected.'); return }
+    if (busy) return
+    setBusy(true)
+
+    if (delta > 0) {
+      const { error } = await supabase.from('tracking_events').insert({
+        tracker_id: trackerId, outcome_id: outcomeId, user_id: userId, game_id: activeGame
+      })
+      if (error) alert(error.message)
+    } else {
+      // remove the most recently logged event for this outcome
+      const { data, error: se } = await supabase.from('tracking_events')
+        .select('id')
+        .eq('outcome_id', outcomeId)
+        .eq('game_id', activeGame)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      if (se) alert(se.message)
+      else if (data && data.length > 0) {
+        const { error } = await supabase.from('tracking_events').delete().eq('id', data[0].id)
+        if (error) alert(error.message)
+      }
+    }
+
+    await onChange()
+    setBusy(false)
+  }
+
   return (
     <div className="screen">
-      <h1>Database</h1>
+      <div className="settings-head">
+        <h1>Database</h1>
+        {anyData && (
+          <button className={`edit-toggle ${editing ? 'on' : ''}`} onClick={() => setEditing(!editing)}>
+            {editing ? 'Done' : 'Edit'}
+          </button>
+        )}
+      </div>
       <GameTabs games={games} activeGame={activeGame} setActiveGame={setActiveGame} />
+      {editing && <p className="edit-hint">Tap − or + to correct a count. Changes save immediately.</p>}
       {!anyData && <p className="empty">No plays yet. Create some in Setup.</p>}
       {byStreet.map(({ street, plays }) => (
         plays.length > 0 && (
@@ -348,6 +389,22 @@ function Database({ trackers, outcomes, events, games, activeGame, setActiveGame
                     {list.map(o => {
                       const c = perOutcome[o.id] || 0
                       const pct = total > 0 ? Math.round((c / total) * 100) : 0
+
+                      if (editing) {
+                        return (
+                          <div key={o.id} className="db-row edit">
+                            <span className="db-row-label">{o.label}</span>
+                            <div className="adj-group">
+                              <button className="adj-btn" disabled={busy || c === 0}
+                                onClick={() => adjust(p.id, o.id, -1)}>−</button>
+                              <span className="adj-count">{c}</span>
+                              <button className="adj-btn" disabled={busy}
+                                onClick={() => adjust(p.id, o.id, 1)}>+</button>
+                            </div>
+                          </div>
+                        )
+                      }
+
                       return (
                         <div key={o.id} className="db-row">
                           <span className="db-row-label">{o.label}</span>

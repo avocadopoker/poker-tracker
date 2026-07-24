@@ -239,3 +239,32 @@ h2 { font-size: 1rem; margin: 0; }
 .subtab.active { background: var(--surface); color: var(--red); box-shadow: 0 1px 3px rgba(20,20,30,0.08); }
 
 .add-title { font-size: 1.25rem; font-weight: 800; margin: 6px 0 4px; }
+
+/* database edit mode */
+.edit-toggle {
+  background: none; border: 1.5px solid var(--line); color: var(--muted);
+  padding: 9px 18px; border-radius: 10px; font-size: 0.85rem; font-weight: 700; cursor: pointer;
+  transition: all 0.12s;
+}
+.edit-toggle:hover { border-color: var(--red); color: var(--red); }
+.edit-toggle.on { background: var(--red); border-color: var(--red); color: #fff; }
+
+.edit-hint {
+  color: var(--muted); font-size: 0.85rem; margin: -8px 0 18px;
+  background: var(--red-soft); padding: 10px 14px; border-radius: 10px;
+}
+
+.db-row.edit { justify-content: space-between; }
+.adj-group { display: flex; align-items: center; gap: 4px; }
+.adj-btn {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: var(--surface); border: 1.5px solid var(--line); color: var(--red);
+  font-size: 1.3rem; font-weight: 700; cursor: pointer; line-height: 1;
+  transition: all 0.12s;
+}
+.adj-btn:hover:not(:disabled) { border-color: var(--red); background: var(--red-soft); }
+.adj-btn:active:not(:disabled) { transform: scale(0.94); }
+.adj-btn:disabled { opacity: 0.35; cursor: default; }
+.adj-count {
+  min-width: 46px; text-align: center; font-size: 1.05rem; font-weight: 800;
+}
