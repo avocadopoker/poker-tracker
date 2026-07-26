@@ -8,12 +8,11 @@ workflows:
         - appstore_credentials    # APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
       vars:
         BUNDLE_ID: "com.larsnickolai.livepoker"
-        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
         APP_STORE_APPLE_ID: 6794920629
       node: 22
       xcode: latest
-      cocoapods: default
     scripts:
       - name: Install npm dependencies
         script: npm ci
@@ -34,26 +33,10 @@ workflows:
           echo $CM_PROVISIONING_PROFILE | base64 --decode > "$PROFILES_HOME/profile.mobileprovision"
       - name: Set up code signing settings on Xcode project
         script: xcode-project use-profiles
-      - name: Install CocoaPods dependencies
-        script: |
-          set -e
-          npx cap sync ios
-          cd ios/App
-          echo "--- working directory ---"
-          pwd
-          echo "--- directory contents ---"
-          ls -la
-          if [ ! -f "Podfile" ]; then
-            echo "ERROR: Podfile still missing after cap sync ios"
-            exit 1
-          fi
-          pod install --repo-update
-          echo "--- after pod install ---"
-          ls -la
       - name: Build ipa for distribution
         script: |
           xcode-project build-ipa \
-            --workspace "$XCODE_WORKSPACE" \
+            --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
     artifacts:
       - build/ios/ipa/*.ipa
