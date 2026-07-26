@@ -10,7 +10,7 @@ workflows:
         BUNDLE_ID: "com.larsnickolai.livepoker"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
-        APP_STORE_APPLE_ID: 0000000000   # <-- replace with the Apple ID number of the app record in App Store Connect
+        APP_STORE_APPLE_ID: 6794920629
       node: 20
       xcode: latest
       cocoapods: default
