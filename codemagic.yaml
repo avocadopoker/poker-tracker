@@ -36,7 +36,17 @@ workflows:
         script: xcode-project use-profiles
       - name: Install CocoaPods dependencies
         script: |
-          cd ios/App && pod install
+          if [ -f "ios/App/Podfile" ]; then
+            cd ios/App && pod install
+          else
+            echo "No Podfile found — running cap sync to generate it"
+            npx cap sync ios
+            if [ -f "ios/App/Podfile" ]; then
+              cd ios/App && pod install
+            else
+              echo "Still no Podfile after sync; skipping pod install"
+            fi
+          fi
       - name: Build ipa for distribution
         script: |
           xcode-project build-ipa \
