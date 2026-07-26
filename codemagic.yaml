@@ -1,0 +1,51 @@
+workflows:
+  ios-testflight:
+    name: Live Tracker iOS TestFlight
+    max_build_duration: 60
+    environment:
+      groups:
+        - ios_signing_livepoker   # CM_CERTIFICATE, CM_CERTIFICATE_PASSWORD, CM_PROVISIONING_PROFILE
+        - appstore_credentials    # APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
+      vars:
+        BUNDLE_ID: "com.larsnickolai.livepoker"
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+        APP_STORE_APPLE_ID: 0000000000   # <-- replace with the Apple ID number of the app record in App Store Connect
+      node: 20
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install npm dependencies
+        script: npm ci
+      - name: Build web assets
+        script: npm run build
+      - name: Sync Capacitor iOS
+        script: npx cap sync ios
+      - name: Set up keychain
+        script: keychain initialize
+      - name: Import signing certificate
+        script: |
+          echo $CM_CERTIFICATE | base64 --decode > /tmp/cert.p12
+          keychain add-certificates --certificate /tmp/cert.p12 --certificate-password $CM_CERTIFICATE_PASSWORD
+      - name: Import provisioning profile
+        script: |
+          PROFILES_HOME="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES_HOME"
+          echo $CM_PROVISIONING_PROFILE | base64 --decode > "$PROFILES_HOME/profile.mobileprovision"
+      - name: Set up code signing settings on Xcode project
+        script: xcode-project use-profiles
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios/App && pod install
+      - name: Build ipa for distribution
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
